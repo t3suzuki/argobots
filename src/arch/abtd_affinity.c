@@ -299,7 +299,7 @@ void ABTD_affinity_init(ABTI_global *p_global, const char *affinity_str)
     g_affinity.num_cpusets = 0;
     g_affinity.cpusets = NULL;
     g_affinity.initial_cpuset.cpuids = NULL;
-    pthread_t self_native_thread = pthread_self();
+    pthread_t self_native_thread = real_pthread_self();
     ABTD_affinity_list *p_list = NULL;
 
     uint32_t i;
