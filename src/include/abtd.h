@@ -8,6 +8,7 @@
 
 #define __USE_GNU 1
 #include <pthread.h>
+#include "real_pthread.h"
 #include "abtd_atomic.h"
 #include "abtd_context.h"
 #include "abtd_spinlock.h"

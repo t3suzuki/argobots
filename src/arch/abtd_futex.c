@@ -69,6 +69,7 @@ void ABTD_futex_resume(ABTD_futex_single *p_futex)
 
 /* Use Pthreads. */
 #include <pthread.h>
+#include "real_pthread.h"
 
 typedef struct pthread_sync {
     pthread_mutex_t mutex;
@@ -88,7 +89,7 @@ void ABTD_futex_wait_and_unlock(ABTD_futex_multiple *p_futex,
                                 ABTD_spinlock *p_lock)
 {
     pthread_sync sync_obj = PTHREAD_SYNC_STATIC_INITIALIZER;
-    pthread_mutex_lock(&sync_obj.mutex);
+    real_pthread_mutex_lock(&sync_obj.mutex);
     /* This p_next updates must be done "after" taking mutex but "before"
      * releasing p_lock. */
     pthread_sync *p_next = (pthread_sync *)p_futex->p_next;
@@ -98,11 +99,11 @@ void ABTD_futex_wait_and_unlock(ABTD_futex_multiple *p_futex,
     p_futex->p_next = (void *)&sync_obj;
     ABTD_spinlock_release(p_lock);
     while (ABTD_atomic_relaxed_load_int(&sync_obj.val) == 0) {
-        pthread_cond_wait(&sync_obj.cond, &sync_obj.mutex);
+        real_pthread_cond_wait(&sync_obj.cond, &sync_obj.mutex);
     }
     /* I cannot find whether a statically initialized mutex must be unlocked
      * before it gets out of scope or not, but let's choose a safer way. */
-    pthread_mutex_unlock(&sync_obj.mutex);
+    real_pthread_mutex_unlock(&sync_obj.mutex);
 
     /* Since now val is 1, there's no possibility that the signaler is still
      * touching this sync_obj.  sync_obj can be safely released by exiting this
@@ -110,8 +111,8 @@ void ABTD_futex_wait_and_unlock(ABTD_futex_multiple *p_futex,
      * statically allocated pthread_mutex_t and pthread_cond_t, FreeBSD
      * dynamically allocates memory and thus leaks memory if we do not destroy
      * those objects.  Let's choose a safer option. */
-    pthread_cond_destroy(&sync_obj.cond);
-    pthread_mutex_destroy(&sync_obj.mutex);
+    real_pthread_cond_destroy(&sync_obj.cond);
+    real_pthread_mutex_destroy(&sync_obj.mutex);
 }
 
 void ABTD_futex_timedwait_and_unlock(ABTD_futex_multiple *p_futex,
@@ -129,7 +130,7 @@ void ABTD_futex_timedwait_and_unlock(ABTD_futex_multiple *p_futex,
         wait_time.tv_sec += 1;
         wait_time.tv_nsec -= 1e9;
     }
-    pthread_mutex_lock(&sync_obj.mutex);
+    real_pthread_mutex_lock(&sync_obj.mutex);
     /* This p_next updates must be done "after" taking mutex but "before"
      * releasing p_lock. */
     pthread_sync *p_next = (pthread_sync *)p_futex->p_next;
@@ -138,11 +139,11 @@ void ABTD_futex_timedwait_and_unlock(ABTD_futex_multiple *p_futex,
     sync_obj.p_next = p_next;
     p_futex->p_next = (void *)&sync_obj;
     ABTD_spinlock_release(p_lock);
-    pthread_cond_timedwait(&sync_obj.cond, &sync_obj.mutex, &wait_time);
+    real_pthread_cond_timedwait(&sync_obj.cond, &sync_obj.mutex, &wait_time);
 
     /* I cannot find whether a statically initialized mutex must be unlocked
      * before it gets out of scope or not, but let's choose a safer way. */
-    pthread_mutex_unlock(&sync_obj.mutex);
+    real_pthread_mutex_unlock(&sync_obj.mutex);
 
     if (ABTD_atomic_acquire_load_int(&sync_obj.val) != 0) {
         /* Since now val is 1, there's no possibility that the signaler is still
@@ -167,8 +168,8 @@ void ABTD_futex_timedwait_and_unlock(ABTD_futex_multiple *p_futex,
         ABTD_spinlock_release(p_lock);
     }
     /* Free sync_obj. */
-    pthread_cond_destroy(&sync_obj.cond);
-    pthread_mutex_destroy(&sync_obj.mutex);
+    real_pthread_cond_destroy(&sync_obj.cond);
+    real_pthread_mutex_destroy(&sync_obj.mutex);
 }
 
 void ABTD_futex_broadcast(ABTD_futex_multiple *p_futex)
@@ -177,10 +178,10 @@ void ABTD_futex_broadcast(ABTD_futex_multiple *p_futex)
     pthread_sync *p_cur = (pthread_sync *)p_futex->p_next;
     while (p_cur) {
         pthread_sync *p_next = p_cur->p_next;
-        pthread_mutex_lock(&p_cur->mutex);
+        real_pthread_mutex_lock(&p_cur->mutex);
         ABTD_atomic_relaxed_store_int(&p_cur->val, 1);
-        pthread_cond_broadcast(&p_cur->cond);
-        pthread_mutex_unlock(&p_cur->mutex);
+        real_pthread_cond_broadcast(&p_cur->cond);
+        real_pthread_mutex_unlock(&p_cur->mutex);
         /* After "val" is updated and the mutex is unlocked, that pthread_sync
          * may not be touched. */
         p_cur = p_next;
@@ -195,7 +196,7 @@ void ABTD_futex_suspend(ABTD_futex_single *p_futex)
         return;
     }
     pthread_sync sync_obj = PTHREAD_SYNC_STATIC_INITIALIZER;
-    pthread_mutex_lock(&sync_obj.mutex);
+    real_pthread_mutex_lock(&sync_obj.mutex);
     /* Use strong since either suspend or resume must succeed if those two are
      * executed concurrently. */
     if (ABTD_atomic_bool_cas_strong_ptr(&p_futex->p_sync_obj, NULL,
@@ -203,14 +204,14 @@ void ABTD_futex_suspend(ABTD_futex_single *p_futex)
         /* This thread needs to wait on this.  The outer loop is needed to avoid
          * spurious wakeup. */
         while (ABTD_atomic_relaxed_load_int(&sync_obj.val) == 0)
-            pthread_cond_wait(&sync_obj.cond, &sync_obj.mutex);
+            real_pthread_cond_wait(&sync_obj.cond, &sync_obj.mutex);
     } else {
         /* It seems that this futex has already been resumed. */
     }
-    pthread_mutex_unlock(&sync_obj.mutex);
+    real_pthread_mutex_unlock(&sync_obj.mutex);
     /* Resumed by ABTD_futex_resume().  Free sync_obj. */
-    pthread_cond_destroy(&sync_obj.cond);
-    pthread_mutex_destroy(&sync_obj.mutex);
+    real_pthread_cond_destroy(&sync_obj.cond);
+    real_pthread_mutex_destroy(&sync_obj.mutex);
 }
 
 void ABTD_futex_resume(ABTD_futex_single *p_futex)
@@ -230,12 +231,12 @@ void ABTD_futex_resume(ABTD_futex_single *p_futex)
         /* p_next has been updated by the waiter.  Let's wake him up. */
         p_sync_obj = (pthread_sync *)ret_val;
     }
-    pthread_mutex_lock(&p_sync_obj->mutex);
+    real_pthread_mutex_lock(&p_sync_obj->mutex);
     /* After setting value 1 and unlock the mutex, sync_obj will be freed
      * immediately. */
     ABTD_atomic_relaxed_store_int(&p_sync_obj->val, 1);
-    pthread_cond_signal(&p_sync_obj->cond);
-    pthread_mutex_unlock(&p_sync_obj->mutex);
+    real_pthread_cond_signal(&p_sync_obj->cond);
+    real_pthread_mutex_unlock(&p_sync_obj->mutex);
 }
 
 #endif /* !ABT_CONFIG_USE_LINUX_FUTEX */

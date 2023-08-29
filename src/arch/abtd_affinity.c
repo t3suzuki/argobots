@@ -171,6 +171,7 @@
 #include <sys/param.h>
 #include <sys/cpuset.h>
 #include <pthread_np.h>
+#include "real_pthread.h"
 typedef cpuset_t cpu_set_t;
 
 #else /* !__FreeBSD__ */
@@ -205,7 +206,7 @@ ABTU_ret_err static int get_num_cores(pthread_t native_thread, int *p_num_cores)
     int i, num_cores = 0;
     /* Check the number of available cores by counting set bits. */
     cpu_set_t cpuset;
-    int ret = pthread_getaffinity_np(native_thread, sizeof(cpu_set_t), &cpuset);
+    int ret = real_pthread_getaffinity_np(native_thread, sizeof(cpu_set_t), &cpuset);
     if (ret)
         return ABT_ERR_SYS;
     for (i = 0; i < CPU_SETSIZE; i++) {
@@ -225,7 +226,7 @@ ABTU_ret_err static int create_cpuset(pthread_t native_thread,
 {
 #ifdef HAVE_PTHREAD_SETAFFINITY_NP
     cpu_set_t cpuset;
-    int ret = pthread_getaffinity_np(native_thread, sizeof(cpu_set_t), &cpuset);
+    int ret = real_pthread_getaffinity_np(native_thread, sizeof(cpu_set_t), &cpuset);
     if (ret)
         return ABT_ERR_SYS;
     int i, j, num_cpuids = 0;
@@ -251,7 +252,7 @@ ABTU_ret_err static int read_cpuset(pthread_t native_thread, int max_cpuids,
 {
 #ifdef HAVE_PTHREAD_SETAFFINITY_NP
     cpu_set_t cpuset;
-    int ret = pthread_getaffinity_np(native_thread, sizeof(cpu_set_t), &cpuset);
+    int ret = real_pthread_getaffinity_np(native_thread, sizeof(cpu_set_t), &cpuset);
     if (ret)
         return ABT_ERR_SYS;
     int i, num_cpuids = 0;
@@ -286,7 +287,7 @@ ABTU_ret_err static int apply_cpuset(pthread_t native_thread,
         for (i = 0; i < p_cpuset->num_cpuids; i++)
             CPU_SET(int_rem(p_cpuset->cpuids[i], CPU_SETSIZE), &cpuset);
     }
-    int ret = pthread_setaffinity_np(native_thread, sizeof(cpu_set_t), &cpuset);
+    int ret = real_pthread_setaffinity_np(native_thread, sizeof(cpu_set_t), &cpuset);
     return ret == 0 ? ABT_SUCCESS : ABT_ERR_SYS;
 #else
     return ABT_ERR_FEATURE_NA;
@@ -403,7 +404,7 @@ FAILED:
 
 void ABTD_affinity_finalize(ABTI_global *p_global)
 {
-    pthread_t self_native_thread = pthread_self();
+    pthread_t self_native_thread = real_pthread_self();
     if (p_global->set_affinity) {
         /* Set the affinity of the main native thread to the original one. */
         int abt_errno =
