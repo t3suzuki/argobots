@@ -1129,6 +1129,18 @@ int ABT_xstream_get_state(ABT_xstream xstream, ABT_xstream_state *state)
     return ABT_SUCCESS;
 }
 
+int ABT_xstream_get_pthread(ABT_xstream xstream, pthread_t *pthread)
+{
+    ABTI_UB_ASSERT(ABTI_initialized());
+    ABTI_UB_ASSERT(pthread);
+
+    ABTI_xstream *p_xstream = ABTI_xstream_get_ptr(xstream);
+    ABTI_CHECK_NULL_XSTREAM_PTR(p_xstream);
+
+    *pthread = p_xstream->ctx.native_thread;
+    return ABT_SUCCESS;
+}
+
 /**
  * @ingroup ES
  * @brief   Compare two execution stream handles for equality.
